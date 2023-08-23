@@ -156,14 +156,14 @@ class Transformer(nn.Module):
 			self.lm_head.weight = self.decoder_token_embedding.weight
 
 	def forward(self, encoder_x, encoder_attn_mask, decoder_x, decoder_attn_mask):
-		_, encoder_T = encoder_x.size()
+		B, encoder_T = encoder_x.size()
 		_, decoder_T = decoder_x.size()
 		assert (encoder_T <= self.config.context_length) and (decoder_T <= self.config.context_length)
 
 		# forward pass through encoder
 		encoder_x_tok = self.encoder_token_embedding(encoder_x) # (B,encoder_T) -> (B,encoder_T,embed_dim)
 		encoder_x_pos = self.sinusoidal_positional_encoding(torch.arange(encoder_T, device=encoder_x.device)) # (encoder_T,embed_dim)
-		encoder_x_pos = encoder_x_pos.unsqueeze(0) # (encoder_T,embed_dim) -> (1,encoder_T,embed_dim)
+		encoder_x_pos = torch.repeat_interleave(encoder_x_pos.unsqueeze(0), B, dim=0) # (encoder_T,embed_dim) -> (B,encoder_T,embed_dim)
 		encoder_x = self.dropout(encoder_x_tok + encoder_x_pos) # (B,encoder_T,embed_dim)
 		for encoder_block in self.encoder_blocks:
 			encoder_x = encoder_block(encoder_x, encoder_attn_mask) # (B,encoder_T,embed_dim)
@@ -171,7 +171,7 @@ class Transformer(nn.Module):
 		# forward pass through decoder
 		decoder_x_tok = self.decoder_token_embedding(decoder_x) # (B,decoder_T) -> (B,decoder_T,embed_dim)
 		decoder_x_pos = self.sinusoidal_positional_encoding(torch.arange(decoder_T, device=decoder_x.device)) # (decoder_T,embed_dim)
-		decoder_x_pos = decoder_x_pos.unsqueeze(0) # (decoder_T,embed_dim) -> (1,decoder_T,embed_dim)
+		decoder_x_pos = torch.repeat_interleave(decoder_x_pos.unsqueeze(0), B, dim=0) # (decoder_T,embed_dim) -> (B,decoder_T,embed_dim)
 		decoder_x = self.dropout(decoder_x_tok + decoder_x_pos) # (B,decoder_T,embed_dim)
 		for decoder_block in self.decoder_blocks:
 			decoder_x = decoder_block(decoder_x, decoder_attn_mask, encoder_x) # (B,decoder_T,embed_dim)
