@@ -35,16 +35,14 @@ class DecoderBlock(nn.Module):
 										num_heads=num_heads,
 										bias=bias,
 										dropout=dropout,
-										use_mask=True,
-										is_cross_attention=False)
+										is_causal=True)
 		self.ln1 = nn.LayerNorm(embed_dim)
 		self.attn2 = MultiHeadAttention(context_length=context_length,
 										embed_dim=embed_dim,
 										num_heads=num_heads,
 										bias=bias,
 										dropout=dropout,
-										use_mask=True,
-										is_cross_attention=True)
+										is_causal=False)
 		self.ln2 = nn.LayerNorm(embed_dim)
 		self.ffwd = FeedForward(embed_dim=embed_dim,
 								ffwd_dim=ffwd_dim,
@@ -52,14 +50,14 @@ class DecoderBlock(nn.Module):
 		self.ln3 = nn.LayerNorm(embed_dim)
 		self.pre_ln = pre_ln
 
-	def forward(self, x, attn_mask, encoder_x):
+	def forward(self, x, encoder_x, decoder_token_attn_mask=None, encoder_token_attn_mask=None):
 		if self.pre_ln:
-			x = x + self.attn1(self.ln1(x), attn_mask=attn_mask)
-			x = x + self.attn2(self.ln2(x), encoder_x=encoder_x, attn_mask=attn_mask)
+			x = x + self.attn1(self.ln1(x), self.ln1(x), q_token_attn_mask=decoder_token_attn_mask, kv_token_attn_mask=decoder_token_attn_mask)
+			x = x + self.attn2(self.ln2(x), encoder_x, q_token_attn_mask=decoder_token_attn_mask, kv_token_attn_mask=encoder_token_attn_mask)
 			x = x + self.ffwd(self.ln3(x))
 		else:
-			x = self.ln1(x + self.attn1(x), attn_mask=attn_mask)
-			x = self.ln2(x + self.attn2(x, encoder_x=encoder_x, attn_mask=attn_mask))
+			x = self.ln1(x + self.attn1(x, x, q_token_attn_mask=decoder_token_attn_mask, kv_token_attn_mask=decoder_token_attn_mask))
+			x = self.ln2(x + self.attn2(x, encoder_x, q_token_attn_mask=decoder_token_attn_mask, kv_token_attn_mask=encoder_token_attn_mask))
 			x = self.ln3(x + self.ffwd(x))
 		return x
 
@@ -80,8 +78,7 @@ class EncoderBlock(nn.Module):
 										num_heads=num_heads,
 										bias=bias,
 										dropout=dropout,
-										use_mask=False,
-										is_cross_attention=False)
+										is_causal=False)
 		self.ln1 = nn.LayerNorm(embed_dim)
 		self.ffwd = FeedForward(embed_dim=embed_dim,
 								ffwd_dim=ffwd_dim,
@@ -89,12 +86,12 @@ class EncoderBlock(nn.Module):
 		self.ln2 = nn.LayerNorm(embed_dim)
 		self.pre_ln = pre_ln
 
-	def forward(self, x, attn_mask):
+	def forward(self, x, encoder_token_attn_mask=None):
 		if self.pre_ln:
-			x = x + self.attn1(self.ln1(x), attn_mask=attn_mask)
+			x = x + self.attn1(self.ln1(x), self.ln1(x), q_token_attn_mask=encoder_token_attn_mask, kv_token_attn_mask=encoder_token_attn_mask)
 			x = x + self.ffwd(self.ln2(x))
 		else:
-			x = self.ln1(x + self.attn1(x, attn_mask=attn_mask))
+			x = self.ln1(x + self.attn1(x, x, q_token_attn_mask=encoder_token_attn_mask, kv_token_attn_mask=encoder_token_attn_mask))
 			x = self.ln2(x + self.ffwd(x))
 		return x
 
@@ -155,7 +152,7 @@ class Transformer(nn.Module):
 		if config.weight_tying:
 			self.lm_head.weight = self.decoder_token_embedding.weight
 
-	def forward(self, encoder_x, encoder_attn_mask, decoder_x, decoder_attn_mask):
+	def forward(self, encoder_x, decoder_x, encoder_token_attn_mask, decoder_token_attn_mask):
 		B, encoder_T = encoder_x.size()
 		_, decoder_T = decoder_x.size()
 		assert (encoder_T <= self.config.context_length) and (decoder_T <= self.config.context_length)
@@ -166,7 +163,7 @@ class Transformer(nn.Module):
 		encoder_x_pos = torch.repeat_interleave(encoder_x_pos.unsqueeze(0), B, dim=0) # (encoder_T,embed_dim) -> (B,encoder_T,embed_dim)
 		encoder_x = self.dropout(encoder_x_tok + encoder_x_pos) # (B,encoder_T,embed_dim)
 		for encoder_block in self.encoder_blocks:
-			encoder_x = encoder_block(encoder_x, encoder_attn_mask) # (B,encoder_T,embed_dim)
+			encoder_x = encoder_block(encoder_x, encoder_token_attn_mask) # (B,encoder_T,embed_dim)
 		
 		# forward pass through decoder
 		decoder_x_tok = self.decoder_token_embedding(decoder_x) # (B,decoder_T) -> (B,decoder_T,embed_dim)
@@ -174,7 +171,7 @@ class Transformer(nn.Module):
 		decoder_x_pos = torch.repeat_interleave(decoder_x_pos.unsqueeze(0), B, dim=0) # (decoder_T,embed_dim) -> (B,decoder_T,embed_dim)
 		decoder_x = self.dropout(decoder_x_tok + decoder_x_pos) # (B,decoder_T,embed_dim)
 		for decoder_block in self.decoder_blocks:
-			decoder_x = decoder_block(decoder_x, decoder_attn_mask, encoder_x) # (B,decoder_T,embed_dim)
+			decoder_x = decoder_block(decoder_x, encoder_x, decoder_token_attn_mask, encoder_token_attn_mask) # (B,decoder_T,embed_dim)
 
 		# final language model head
 		logits = self.lm_head(decoder_x) # (B,decoder_T,embed_dim) -> (B,decoder_T,decoder_vocab_size)
