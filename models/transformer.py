@@ -24,6 +24,14 @@ class TransformerConfig:
 	weight_tying:bool=False
 	use_grad_ckpt:bool=False
 
+@dataclass
+class TransformerInputBatch:
+	encoder_x:torch.Tensor
+	decoder_x:torch.Tensor
+	encoder_token_attn_mask:torch.Tensor
+	decoder_token_attn_mask:torch.Tensor
+	ground_truth:torch.Tensor
+
 class Transformer(nn.Module):
 	def __init__(self, config:TransformerConfig):
 		super().__init__()
