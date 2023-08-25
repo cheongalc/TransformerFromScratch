@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from typing import Callable, Union
 from dataclasses import dataclass
 from modules.embedding import SinusoidalPositionalEncoding
+from modules.transformer import EncoderBlock, DecoderBlock
 
 @dataclass
 class TransformerConfig:
