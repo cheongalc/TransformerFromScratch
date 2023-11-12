@@ -38,9 +38,9 @@ class Transformer(nn.Module):
 		self.config = config
 
 		# token embeddings
-		self.register_buffer("encoder_token_embedding", torch.nn.Embedding(config.encoder_vocab_size, config.embed_dim))
-		self.register_buffer("decoder_token_embedding", torch.nn.Embedding(config.decoder_vocab_size, config.embed_dim))
-	
+		self.encoder_token_embedding = torch.nn.Embedding(config.encoder_vocab_size, config.embed_dim)
+		self.decoder_token_embedding = torch.nn.Embedding(config.decoder_vocab_size, config.embed_dim)
+		
 		# positional encodings
 		self.register_buffer("sinusoidal_positional_encoding", SinusoidalPositionalEncoding(config.context_length, config.embed_dim))
 
@@ -132,7 +132,7 @@ class Transformer(nn.Module):
 			# apply softmax
 			probs = F.softmax(logits, dim=-1)
 			# sample from the distribution
-			if sampling_strategy == "multinomial":
+			if sampling_strategy == "multinomial": # TODO: Implement topK, topP, beam search
 				next_idx = torch.multinomial(probs, num_samples=1) # (1,1)
 			elif sampling_strategy == "greedy":
 				next_idx = torch.argmax(probs, dim=-1, keepdim=True) # (1,1)

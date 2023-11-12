@@ -21,4 +21,4 @@ class SinusoidalPositionalEncoding(nn.Module):
         self.register_buffer("pos_encoding", pos_encoding)
         
     def forward(self, x):
-        return self.pos_encoding[x.shape(0), :]
+        return self.pos_encoding[:x.shape(0), :]

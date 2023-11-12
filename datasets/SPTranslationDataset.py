@@ -16,7 +16,6 @@ class SPTranslationDatasetConfig:
 	max_seq_len: int = 512
 
 class SPTranslationDataset(Dataset):
-
 	UNK_IDX = 0
 	BOS_IDX = 1
 	EOS_IDX = 2
@@ -47,12 +46,14 @@ class SPTranslationDataset(Dataset):
 		target_tokens = self.target_tokenizer.encode(target_sentence, enable_sampling=True, alpha=0.1, nbest_size=-1)[:self.max_seq_len]
 		# Add the BOS and EOS tokens and convert to tensors
 		src_tokens = torch.tensor([SPTranslationDataset.BOS_IDX] + src_tokens + [SPTranslationDataset.EOS_IDX], dtype=torch.long)
-		target_tokens = torch.tensor([SPTranslationDataset.BOS_IDX] + target_tokens[:-1] + [SPTranslationDataset.EOS_IDX], dtype=torch.long)
-		ground_truth = torch.tensor(target_tokens[1:] + [SPTranslationDataset.EOS_IDX], dtype=torch.long)
+		target_tokens = torch.tensor([SPTranslationDataset.BOS_IDX] + target_tokens, dtype=torch.long)
+		ground_truth = torch.tensor(target_tokens + [SPTranslationDataset.EOS_IDX], dtype=torch.long)
 		return src_tokens, target_tokens, ground_truth
 	
 	@staticmethod
 	def create_padding_attn_mask(x):
+		# 1 means that attention is not blocked
+		# 0 means that attention is blocked
 		return (x != SPTranslationDataset.PAD_IDX) # (B,T)
 
 	@staticmethod
